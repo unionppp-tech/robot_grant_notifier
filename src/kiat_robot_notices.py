@@ -1,6 +1,22 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import sys
+import subprocess
 import os
-import requests
 import datetime
+
+# =========================
+# 필수 라이브러리 자동 설치
+# =========================
+def install(pkg):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
+
+try:
+    import requests
+except ImportError:
+    install("requests")
+    import requests
 
 # =========================
 # 환경 변수
@@ -10,10 +26,10 @@ DATA_GO_KR_API_KEY = os.environ.get("DATA_GO_KR_API_KEY")
 
 API_URL = "https://apis.data.go.kr/1371000/rdBizPbancInfoService/getRdBizPbancInfoList"
 
-KEYWORDS = ["로봇", "robot", "자동화", "AI"]
+KEYWORDS = ["로봇", "robot", "자동화", "ai"]
 
 # =========================
-# 디스코드 전송
+# 디스코드 메시지 전송
 # =========================
 def send_message(msg):
     now = datetime.datetime.now()
@@ -22,7 +38,7 @@ def send_message(msg):
     print(msg)
 
 # =========================
-# R&D 공고 조회
+# 국가 R&D 공고 조회 (공공데이터 API)
 # =========================
 def fetch_robot_rd_projects():
     params = {
@@ -35,7 +51,7 @@ def fetch_robot_rd_projects():
     res = requests.get(API_URL, params=params, timeout=10)
     res.raise_for_status()
 
-    body = res.json()["response"]["body"]
+    body = res.json().get("response", {}).get("body", {})
     items = body.get("items", {}).get("item", [])
 
     results = []
@@ -46,18 +62,18 @@ def fetch_robot_rd_projects():
         start = it.get("rcptBgngYmd", "")
         end = it.get("rcptEndYmd", "")
 
-        if any(k.lower() in title.lower() for k in KEYWORDS):
+        if any(k in title.lower() for k in KEYWORDS):
             results.append(
                 f"[{org}]\n"
                 f"{title}\n"
-                f"접수: {start} ~ {end}\n"
+                f"접수기간: {start} ~ {end}\n"
                 f"{url}"
             )
 
     return results
 
 # =========================
-# 메인
+# 메인 실행
 # =========================
 if __name__ == "__main__":
     projects = fetch_robot_rd_projects()
