@@ -1,0 +1,24 @@
+name: Robot Grant Notifier
+
+on:
+  schedule:
+    - cron: '0 14 * * *' # 매일 23:00 KST 실행 (UTC+9)
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run KIAT Robot Notifier
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python src/kiat_robot_notices.py
