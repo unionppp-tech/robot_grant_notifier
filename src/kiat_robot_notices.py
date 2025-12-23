@@ -42,7 +42,7 @@ def send_message(msg: str):
 # =========================
 # 로봇 관련 공고 크롤링
 # =========================
-def fetch_robot_public_projects(keyword="로봇"):
+def fetch_robot_public_projects(keyword):
     base_url = "https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/list.do"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
@@ -89,7 +89,7 @@ def fetch_robot_public_projects(keyword="로봇"):
 # 메인 실행
 # =========================
 if __name__ == "__main__":
-    notices = fetch_robot_public_projects("공고")
+    notices = fetch_robot_public_projects("중소기업")
     if not notices:
         send_message("🤖 로봇 공공사업 공고를 찾지 못했습니다.")
     else:
