@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-import sys
 import subprocess
-import os
+import sys
 import datetime
 
 # =========================
-# 라이브러리 자동 설치
+# 필수 라이브러리 설치
 # =========================
-def install(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+def install(pkg):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
 
 try:
     import requests
@@ -27,6 +24,7 @@ except ImportError:
 # =========================
 # 환경 변수
 # =========================
+import os
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 
 # =========================
@@ -35,55 +33,66 @@ DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 def send_message(msg: str):
     now = datetime.datetime.now()
     payload = {"content": f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"}
-    requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
+    try:
+        requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
+    except Exception as e:
+        print(f"Discord send failed: {e}")
     print(msg)
 
 # =========================
-# KIAT 로봇 공모사업 공고
+# 로봇 관련 공고 크롤링
 # =========================
-def get_kiat_robot_notices(max_count=5):
-    url = "https://www.kiat.or.kr/site/kiat/ex/bbs/List.do?cbIdx=277"
+def fetch_robot_public_projects(keyword="로봇"):
+    base_url = "https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/list.do"
     headers = {
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
+    params = {
+        "searchField": "all",
+        "searchText": keyword,
+        "pageIndex": "1"
     }
 
-    res = requests.get(url, headers=headers, timeout=10)
-    if res.status_code != 200:
-        send_message(f"❌ KIAT 접속 실패 (status={res.status_code})")
+    try:
+        resp = requests.get(base_url, headers=headers, params=params, timeout=10)
+        if resp.status_code != 200:
+            send_message(f"❌ 공고 페이지 요청 실패: status={resp.status_code}")
+            return []
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        rows = soup.select("div.board-list table tbody tr")
+
+        results = []
+        for row in rows:
+            # 공고 제목
+            title_tag = row.select_one("td a")
+            if not title_tag:
+                continue
+
+            title = title_tag.get_text(strip=True)
+            link = "https://www.bizinfo.go.kr" + title_tag.get("href")
+            # 날짜
+            date_tag = row.select_one("td:nth-child(5)")
+            date_str = date_tag.get_text(strip=True) if date_tag else ""
+
+            # 키워드 필터 (로봇 포함)
+            if keyword in title:
+                results.append(f"{date_str} | {title}\n{link}")
+
+        return results
+
+    except Exception as e:
+        send_message(f"❌ 크롤링 에러: {e}")
         return []
-
-    soup = BeautifulSoup(res.text, "html.parser")
-    rows = soup.select("table tbody tr")
-
-    results = []
-    for row in rows:
-        title_tag = row.select_one("td.subject a")
-        date_tag = row.select_one("td.date")
-
-        if not title_tag or not date_tag:
-            continue
-
-        title = title_tag.get_text(strip=True)
-        date = date_tag.get_text(strip=True)
-        link = "https://www.kiat.or.kr" + title_tag.get("href")
-
-        if "로봇" in title or "robot" in title.lower():
-            results.append(f"{date} | {title}\n{link}")
-
-        if len(results) >= max_count:
-            break
-
-    return results
 
 # =========================
 # 메인 실행
 # =========================
 if __name__ == "__main__":
-    notices = get_kiat_robot_notices()
-
+    notices = fetch_robot_public_projects("로봇")
     if not notices:
-        send_message("🤖 KIAT 최근 로봇 관련 공모사업 공고가 없습니다.")
+        send_message("🤖 로봇 공공사업 공고를 찾지 못했습니다.")
     else:
-        send_message("🤖 KIAT 로봇 관련 공모사업 공고")
-        for n in notices:
-            send_message(n)
+        send_message("🤖 최신 로봇 공공사업 공고:")
+        for notice in notices:
+            send_message(notice)
