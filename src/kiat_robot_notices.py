@@ -1,8 +1,28 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import sys
+import subprocess
 import os
-import requests
-from bs4 import BeautifulSoup
 import datetime
-import time
+
+# =========================
+# 라이브러리 자동 설치
+# =========================
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+try:
+    import requests
+except ImportError:
+    install("requests")
+    import requests
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    install("beautifulsoup4")
+    from bs4 import BeautifulSoup
 
 # =========================
 # 환경 변수
@@ -19,42 +39,50 @@ def send_message(msg: str):
         requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
     except Exception as e:
         print(f"Discord send failed: {e}")
-    print(payload)
+    print(msg)
 
 # =========================
-# KIAT 로봇 관련 공고 크롤링
+# KIAT 로봇 공모사업 크롤링
 # =========================
 def get_kiat_robot_notices(max_count=5):
     url = "https://www.kiat.or.kr/site/notice/list"
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
     }
 
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            send_message(f"❌ KIAT 접속 실패, 상태코드: {response.status_code}")
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code != 200:
+            send_message(f"❌ KIAT 접속 실패 (status={res.status_code})")
             return []
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        notices = []
+        soup = BeautifulSoup(res.text, "html.parser")
 
-        # 공고 리스트 추출 (사이트 구조에 맞게 class/id 확인)
-        rows = soup.select("table tbody tr")  # 일반적으로 tbody > tr 구조
+        results = []
+        rows = soup.select("table tbody tr")
+
         for row in rows:
-            title_tag = row.select_one("td.title a")
-            date_tag = row.select_one("td.date")
-            if title_tag and date_tag:
-                title = title_tag.get_text(strip=True)
-                date = date_tag.get_text(strip=True)
-                link = "https://www.kiat.or.kr" + title_tag.get("href")
-                # 로봇 관련 키워드 필터링
-                if "로봇" in title or "Robot" in title:
-                    notices.append(f"{date} | {title} | {link}")
-            if len(notices) >= max_count:
+            title_tag = row.select_one("a")
+            date_tag = row.select_one("td:last-child")
+
+            if not title_tag or not date_tag:
+                continue
+
+            title = title_tag.get_text(strip=True)
+            date = date_tag.get_text(strip=True)
+            link = "https://www.kiat.or.kr" + title_tag.get("href", "")
+
+            if "로봇" in title or "robot" in title.lower():
+                results.append(f"{date} | {title}\n{link}")
+
+            if len(results) >= max_count:
                 break
-        return notices
+
+        return results
 
     except Exception as e:
         send_message(f"❌ KIAT 크롤링 오류: {e}")
@@ -64,10 +92,11 @@ def get_kiat_robot_notices(max_count=5):
 # 메인 실행
 # =========================
 if __name__ == "__main__":
-    robot_notices = get_kiat_robot_notices()
-    if robot_notices:
-        send_message("🤖 KIAT 최신 로봇 관련 공모사업 공고:")
-        for notice in robot_notices:
-            send_message(notice)
+    notices = get_kiat_robot_notices()
+
+    if not notices:
+        send_message("🤖 KIAT 최근 로봇 관련 공모사업 공고가 없습니다.")
     else:
-        send_message("🤖 KIAT 최신 로봇 관련 공고가 없습니다.")
+        send_message("🤖 KIAT 로봇 관련 공모사업 공고")
+        for n in notices:
+            send_message(n)
