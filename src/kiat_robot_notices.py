@@ -1,33 +1,16 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-import sys
-import subprocess
 import os
+import requests
 import datetime
-
-# =========================
-# 라이브러리 자동 설치
-# =========================
-def install(pkg):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
-
-try:
-    import requests
-except ImportError:
-    install("requests")
-    import requests
-
-try:
-    from bs4 import BeautifulSoup
-except ImportError:
-    install("beautifulsoup4")
-    from bs4 import BeautifulSoup
 
 # =========================
 # 환경 변수
 # =========================
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
+DATA_GO_KR_API_KEY = os.environ.get("DATA_GO_KR_API_KEY")
+
+API_URL = "https://apis.data.go.kr/1371000/rdBizPbancInfoService/getRdBizPbancInfoList"
+
+KEYWORDS = ["로봇", "robot", "자동화", "AI"]
 
 # =========================
 # 디스코드 전송
@@ -35,44 +18,41 @@ DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 def send_message(msg):
     now = datetime.datetime.now()
     payload = {"content": f"[{now:%Y-%m-%d %H:%M:%S}] {msg}"}
-    requests.post(DISCORD_WEBHOOK_URL, json=payload)
+    requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
     print(msg)
 
 # =========================
-# 기업마당 공공사업공고 크롤링
+# R&D 공고 조회
 # =========================
-def fetch_public_notices(max_count=5):
-    url = "https://www.bizinfo.go.kr/web/lay1/bbs/S1T122C128/AS/74/list.do"
-    headers = {
-        "User-Agent": "Mozilla/5.0"
+def fetch_robot_rd_projects():
+    params = {
+        "serviceKey": DATA_GO_KR_API_KEY,
+        "pageNo": 1,
+        "numOfRows": 50,
+        "type": "json"
     }
 
-    res = requests.get(url, headers=headers, timeout=10)
-    if res.status_code != 200:
-        send_message(f"❌ 기업마당 접속 실패 (status={res.status_code})")
-        return []
+    res = requests.get(API_URL, params=params, timeout=10)
+    res.raise_for_status()
 
-    soup = BeautifulSoup(res.text, "html.parser")
-    rows = soup.select("div.board-list table tbody tr")
+    body = res.json()["response"]["body"]
+    items = body.get("items", {}).get("item", [])
 
     results = []
-    for row in rows:
-        title_tag = row.select_one("td a")
-        date_tag = row.select_one("td:last-child")
+    for it in items:
+        title = it.get("pbancNm", "")
+        org = it.get("pbancInstNm", "")
+        url = it.get("pbancUrl", "")
+        start = it.get("rcptBgngYmd", "")
+        end = it.get("rcptEndYmd", "")
 
-        if not title_tag or not date_tag:
-            continue
-
-        title = title_tag.get_text(strip=True)
-        date = date_tag.get_text(strip=True)
-        link = "https://www.bizinfo.go.kr" + title_tag.get("href", "")
-
-        # ✅ 핵심 필터: '공고'라는 단어가 들어간 것만
-        if "공고" in title:
-            results.append(f"{date} | {title}\n{link}")
-
-        if len(results) >= max_count:
-            break
+        if any(k.lower() in title.lower() for k in KEYWORDS):
+            results.append(
+                f"[{org}]\n"
+                f"{title}\n"
+                f"접수: {start} ~ {end}\n"
+                f"{url}"
+            )
 
     return results
 
@@ -80,11 +60,11 @@ def fetch_public_notices(max_count=5):
 # 메인
 # =========================
 if __name__ == "__main__":
-    notices = fetch_public_notices()
+    projects = fetch_robot_rd_projects()
 
-    if not notices:
-        send_message("📭 오늘 기준 공공사업 공고를 찾지 못했습니다.")
+    if not projects:
+        send_message("🤖 최근 로봇 관련 국가 R&D 공모사업이 없습니다.")
     else:
-        send_message("📢 오늘의 공공사업 공고")
-        for n in notices:
-            send_message(n)
+        send_message("🤖 로봇 관련 국가 R&D 공모사업")
+        for p in projects[:5]:
+            send_message(p)
