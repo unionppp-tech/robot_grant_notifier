@@ -35,58 +35,45 @@ DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 def send_message(msg: str):
     now = datetime.datetime.now()
     payload = {"content": f"[{now.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"}
-    try:
-        requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
-    except Exception as e:
-        print(f"Discord send failed: {e}")
+    requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
     print(msg)
 
 # =========================
-# KIAT 로봇 공모사업 크롤링
+# KIAT 로봇 공모사업 공고
 # =========================
 def get_kiat_robot_notices(max_count=5):
-    url = "https://www.kiat.or.kr/site/notice/list"
+    url = "https://www.kiat.or.kr/site/kiat/ex/bbs/List.do?cbIdx=277"
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
-        )
+        "User-Agent": "Mozilla/5.0"
     }
 
-    try:
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code != 200:
-            send_message(f"❌ KIAT 접속 실패 (status={res.status_code})")
-            return []
-
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        results = []
-        rows = soup.select("table tbody tr")
-
-        for row in rows:
-            title_tag = row.select_one("a")
-            date_tag = row.select_one("td:last-child")
-
-            if not title_tag or not date_tag:
-                continue
-
-            title = title_tag.get_text(strip=True)
-            date = date_tag.get_text(strip=True)
-            link = "https://www.kiat.or.kr" + title_tag.get("href", "")
-
-            if "로봇" in title or "robot" in title.lower():
-                results.append(f"{date} | {title}\n{link}")
-
-            if len(results) >= max_count:
-                break
-
-        return results
-
-    except Exception as e:
-        send_message(f"❌ KIAT 크롤링 오류: {e}")
+    res = requests.get(url, headers=headers, timeout=10)
+    if res.status_code != 200:
+        send_message(f"❌ KIAT 접속 실패 (status={res.status_code})")
         return []
+
+    soup = BeautifulSoup(res.text, "html.parser")
+    rows = soup.select("table tbody tr")
+
+    results = []
+    for row in rows:
+        title_tag = row.select_one("td.subject a")
+        date_tag = row.select_one("td.date")
+
+        if not title_tag or not date_tag:
+            continue
+
+        title = title_tag.get_text(strip=True)
+        date = date_tag.get_text(strip=True)
+        link = "https://www.kiat.or.kr" + title_tag.get("href")
+
+        if "로봇" in title or "robot" in title.lower():
+            results.append(f"{date} | {title}\n{link}")
+
+        if len(results) >= max_count:
+            break
+
+    return results
 
 # =========================
 # 메인 실행
