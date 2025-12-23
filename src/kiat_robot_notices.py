@@ -89,7 +89,7 @@ def fetch_robot_public_projects(keyword="로봇"):
 # 메인 실행
 # =========================
 if __name__ == "__main__":
-    notices = fetch_robot_public_projects("로봇")
+    notices = fetch_robot_public_projects("공고")
     if not notices:
         send_message("🤖 로봇 공공사업 공고를 찾지 못했습니다.")
     else:
